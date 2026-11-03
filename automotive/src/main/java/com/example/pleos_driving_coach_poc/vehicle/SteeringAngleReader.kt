@@ -1,4 +1,4 @@
-package com.example.pleos_driving_coach_poc
+package com.example.pleos_driving_coach_poc.vehicle
 
 import android.content.Context
 import android.os.Handler
