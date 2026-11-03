@@ -1,6 +1,5 @@
 package com.example.pleos_driving_coach_poc.vehicle
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -9,11 +8,10 @@ import ai.pleos.playground.vehicle.Vehicle
 import ai.pleos.playground.vehicle.listener.SteeringWheelAngleListener
 
 internal class SteeringAngleReader(
-    context: Context,
+    private val vehicle: Vehicle,
     private val onValue: (Float?) -> Unit,
     private val onStatus: (String) -> Unit
 ) : SteeringWheelAngleListener {
-    private val vehicle = Vehicle(context)
     private val steeringWheel = vehicle.getSteeringWheel()
     private val handler = Handler(Looper.getMainLooper())
     private var started = false
@@ -27,7 +25,6 @@ internal class SteeringAngleReader(
         if (started || closed) return
         started = true
         try {
-            vehicle.initialize()
             steeringWheel.getCurrentSteeringWheelAngle(
                 onComplete = { angle ->
                     Log.i("SteeringProbe", "READ angleDeg=$angle")
@@ -90,8 +87,6 @@ internal class SteeringAngleReader(
             if (registered) steeringWheel.unregisterSteeringWheelAngle(this)
         } catch (error: RuntimeException) {
             Log.w("SteeringProbe", "UNSUBSCRIBE failed", error)
-        } finally {
-            if (started) vehicle.release()
         }
     }
 }

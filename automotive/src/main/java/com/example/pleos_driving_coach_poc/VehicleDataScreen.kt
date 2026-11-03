@@ -4,6 +4,8 @@ import android.car.Car
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import ai.pleos.playground.vehicle.Vehicle
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
@@ -18,6 +20,8 @@ import com.example.pleos_driving_coach_poc.vehicle.BrakeReader
 import com.example.pleos_driving_coach_poc.vehicle.SteeringAngleReader
 import com.example.pleos_driving_coach_poc.vehicle.SpeedReader
 import com.example.pleos_driving_coach_poc.vehicle.VehicleStateReader
+import com.example.pleos_driving_coach_poc.vehicle.SafetyReader
+import ai.pleos.playground.vehicle.constant.telltale.TelltaleState
 import java.util.Locale
 import kotlin.math.abs
 
@@ -26,6 +30,8 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
     private var status = "정차 상태에서 이 항목을 눌러 속도 권한을 허용해 주세요."
 
     private val handler = Handler(Looper.getMainLooper())
+    private val vehicle = Vehicle(context)
+    private var vehicleInitialized = false
     private var latestSpeed = "대기 중"
     private var displayedSpeed = latestSpeed
     private var latestSteering = "대기 중"
@@ -38,6 +44,33 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
     private var displayedBrakeStatus = brakeStatus
     private var stoppedState = "정차 여부 미확인"
     private var displayedStoppedState = stoppedState
+    private var safetyValue = "수신값 없음"
+    private var displayedSafetyValue = safetyValue
+    private var safetyStatus = "지원 확인 대기"
+    private var displayedSafetyStatus = safetyStatus
+    private val safetyReader = SafetyReader(
+        context,
+        vehicle,
+        onValue = { telltales ->
+            safetyValue = if (telltales == null) {
+                "수신 불가"
+            } else {
+                val active = telltales.telltales.filter { it.state != TelltaleState.OFF }
+                if (active.isEmpty()) {
+                    "수신 ${telltales.telltales.size}개 · 점등/점멸 항목 없음"
+                } else {
+                    "점등/점멸 ${active.size}개 · " +
+                        active.take(3).joinToString { "${it.type} ${it.state}" } +
+                        if (active.size > 3) " · 전체 항목은 SafetyProbe 로그 확인" else ""
+                }
+            }
+            scheduleRefresh()
+        },
+        onStatus = { message ->
+            safetyStatus = message
+            scheduleRefresh()
+        }
+    )
     private val stateValues = mutableMapOf<Int, String>()
     private val stateDiagnostics = mutableMapOf<Int, String>()
     private var stateChanged = false
@@ -48,7 +81,7 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
         scheduleRefresh()
     }
     private val brakeReader = BrakeReader(
-        context,
+        vehicle,
         onValue = { pressed ->
             latestBrake = when (pressed) {
                 true -> "밟음"
@@ -80,7 +113,7 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
         onStatus = { updateStatus(it) }
     )
     private val steeringReader = SteeringAngleReader(
-        context,
+        vehicle,
         onValue = { angle ->
             latestSteering = if (angle != null && angle.isFinite()) {
                 String.format(Locale.ROOT, "%.1f°", angle)
@@ -97,13 +130,16 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
     private val refreshDisplay = Runnable {
         if (latestSpeed != displayedSpeed || latestSteering != displayedSteering ||
             steeringStatus != displayedSteeringStatus || latestBrake != displayedBrake ||
-            brakeStatus != displayedBrakeStatus || stoppedState != displayedStoppedState || stateChanged) {
+            brakeStatus != displayedBrakeStatus || stoppedState != displayedStoppedState || stateChanged ||
+            safetyValue != displayedSafetyValue || safetyStatus != displayedSafetyStatus) {
             displayedSpeed = latestSpeed
             displayedSteering = latestSteering
             displayedSteeringStatus = steeringStatus
             displayedBrake = latestBrake
             displayedBrakeStatus = brakeStatus
             displayedStoppedState = stoppedState
+            displayedSafetyValue = safetyValue
+            displayedSafetyStatus = safetyStatus
             stateChanged = false
             invalidate()
         }
@@ -114,8 +150,24 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
     }
 
     override fun onResume(owner: LifecycleOwner) {
-        steeringReader.start()
-        brakeReader.start()
+        if (!vehicleInitialized) {
+            try {
+                vehicle.initialize()
+                vehicleInitialized = true
+            } catch (error: RuntimeException) {
+                Log.w("VehicleDataScreen", "Pleos SDK initialization failed", error)
+                val message = "Pleos SDK 연결 시작 실패: ${error.message}"
+                steeringStatus = message
+                brakeStatus = message
+                safetyStatus = message
+                scheduleRefresh()
+            }
+        }
+        if (vehicleInitialized) {
+            steeringReader.start()
+            brakeReader.start()
+            safetyReader.start()
+        }
         stateReader.start()
         if (hasSpeedPermission()) {
             speedReader.start()
@@ -155,8 +207,8 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
 
     override fun onGetTemplate(): ListTemplate {
         val items = ItemList.Builder()
-            .addItem(Row.Builder().setTitle("현재 속도").addText(displayedSpeed)
-                .addText(status.replace("\n", " · "))
+            .addItem(Row.Builder().setTitle("속도 · 정차 여부").addText("$displayedSpeed · $displayedStoppedState")
+                .addText(status.replace("\n", " · ") + " · 정차 추정 |속도| ≤ 0.1 m/s")
                 .apply {
                     if (!hasSpeedPermission()) {
                         setOnClickListener(androidx.car.app.model.ParkedOnlyOnClickListener.create {
@@ -168,13 +220,13 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
                 .addText(displayedSteeringStatus.replace("\n", " · ")).build())
             .addItem(Row.Builder().setTitle("브레이크 페달").addText(displayedBrake)
                 .addText(displayedBrakeStatus.replace("\n", " · ")).build())
-            .addItem(Row.Builder().setTitle("정차 여부 · 속도 기반 추정")
-                .addText(displayedStoppedState).addText("정차 추정 기준 |속도| ≤ 0.1 m/s").build())
         VehicleStateReader.labels.forEach { (propertyId, title) ->
             items.addItem(Row.Builder().setTitle(title)
                 .addText(stateValues[propertyId] ?: "수신값 없음")
                 .addText(stateDiagnostics[propertyId] ?: "조회·구독 대기").build())
         }
+        items.addItem(Row.Builder().setTitle("계기판 경고등 · SDK 코드")
+            .addText(displayedSafetyValue).addText(displayedSafetyStatus).build())
         val actions = ActionStrip.Builder().addAction(Action.Builder().setTitle("IMU 확인")
             .setOnClickListener { screenManager.push(ImuScreen(carContext)) }.build()).build()
         return ListTemplate.Builder().setSingleList(items.build())
@@ -192,7 +244,15 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
                 try {
                     brakeReader.close()
                 } finally {
-                    stateReader.close()
+                    try {
+                        stateReader.close()
+                    } finally {
+                        try {
+                            safetyReader.close()
+                        } finally {
+                            vehicle.release()
+                        }
+                    }
                 }
             }
         }

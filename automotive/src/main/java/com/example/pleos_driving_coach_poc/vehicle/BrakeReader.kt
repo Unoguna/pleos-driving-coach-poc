@@ -1,6 +1,5 @@
 package com.example.pleos_driving_coach_poc.vehicle
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -9,11 +8,10 @@ import ai.pleos.playground.vehicle.Vehicle
 import ai.pleos.playground.vehicle.listener.BrakePedalStatusListener
 
 internal class BrakeReader(
-    context: Context,
+    private val vehicle: Vehicle,
     private val onValue: (Boolean?) -> Unit,
     private val onStatus: (String) -> Unit
 ) : BrakePedalStatusListener {
-    private val vehicle = Vehicle(context)
     private val brake = vehicle.getBrake()
     private val handler = Handler(Looper.getMainLooper())
     private var started = false
@@ -28,7 +26,6 @@ internal class BrakeReader(
         if (started || closed) return
         started = true
         try {
-            vehicle.initialize()
             brake.checkBrakePedalStatusCapabilities(
                 onComplete = { config ->
                     Log.i("BrakeProbe", "CAPABILITY accessType=${config.accessType}")
@@ -107,8 +104,6 @@ internal class BrakeReader(
             if (registered) brake.unregisterBrakePedalStatus(this)
         } catch (error: RuntimeException) {
             Log.w("BrakeProbe", "UNSUBSCRIBE failed", error)
-        } finally {
-            if (started) vehicle.release()
         }
     }
 }
