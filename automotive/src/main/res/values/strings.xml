@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">pleos-driving-coach-poc</string>
+    <string name="overlay_probe_message">운전 코칭 · 표시 시험\n부드럽게 감속해 보세요.\n8초 후 자동 닫힘</string>
 </resources>

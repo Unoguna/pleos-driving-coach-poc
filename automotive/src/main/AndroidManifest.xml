@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
     <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
     <uses-permission android:name="pleos.car.permission.CAR_SAFETY" />
@@ -44,6 +47,10 @@
                 android:name="distractionOptimized"
                 android:value="true" />
         </activity>
+        <service
+            android:name=".notification.NotificationProbeService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
         <service
             android:name=".AutomotiveCarAppService"
             android:exported="true">
