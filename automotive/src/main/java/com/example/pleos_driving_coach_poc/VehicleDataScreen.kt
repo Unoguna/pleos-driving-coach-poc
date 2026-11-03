@@ -13,6 +13,7 @@ import androidx.car.app.model.Row
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import com.example.pleos_driving_coach_poc.vehicle.BrakeReader
 import com.example.pleos_driving_coach_poc.vehicle.SteeringAngleReader
 import com.example.pleos_driving_coach_poc.vehicle.SpeedReader
 import java.util.Locale
@@ -28,6 +29,25 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
     private var displayedSteering = latestSteering
     private var steeringStatus = "연결 대기"
     private var displayedSteeringStatus = steeringStatus
+    private var latestBrake = "대기 중"
+    private var displayedBrake = latestBrake
+    private var brakeStatus = "연결 대기"
+    private var displayedBrakeStatus = brakeStatus
+    private val brakeReader = BrakeReader(
+        context,
+        onValue = { pressed ->
+            latestBrake = when (pressed) {
+                true -> "밟음"
+                false -> "뗌"
+                null -> "수신 불가"
+            }
+            scheduleRefresh()
+        },
+        onStatus = { message ->
+            brakeStatus = message
+            scheduleRefresh()
+        }
+    )
     private val speedReader = SpeedReader(
         context,
         onValue = { metersPerSecond ->
@@ -57,10 +77,13 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
     )
     private val refreshDisplay = Runnable {
         if (latestSpeed != displayedSpeed || latestSteering != displayedSteering ||
-            steeringStatus != displayedSteeringStatus) {
+            steeringStatus != displayedSteeringStatus || latestBrake != displayedBrake ||
+            brakeStatus != displayedBrakeStatus) {
             displayedSpeed = latestSpeed
             displayedSteering = latestSteering
             displayedSteeringStatus = steeringStatus
+            displayedBrake = latestBrake
+            displayedBrakeStatus = brakeStatus
             invalidate()
         }
     }
@@ -71,6 +94,7 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
 
     override fun onResume(owner: LifecycleOwner) {
         steeringReader.start()
+        brakeReader.start()
         if (hasSpeedPermission()) {
             speedReader.start()
         }
@@ -109,10 +133,12 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
 
     override fun onGetTemplate(): PaneTemplate {
         val pane = Pane.Builder()
-            .addRow(Row.Builder().setTitle("현재 속도").addText(displayedSpeed).build())
-            .addRow(Row.Builder().setTitle("진단 상태").addText(status).build())
-            .addRow(Row.Builder().setTitle("앞바퀴 조향각 · 좌회전 음수").addText(displayedSteering).build())
-            .addRow(Row.Builder().setTitle("조향각 진단").addText(displayedSteeringStatus).build())
+            .addRow(Row.Builder().setTitle("현재 속도").addText(displayedSpeed)
+                .addText(status.replace("\n", " · ")).build())
+            .addRow(Row.Builder().setTitle("앞바퀴 조향각 · 좌회전 음수").addText(displayedSteering)
+                .addText(displayedSteeringStatus.replace("\n", " · ")).build())
+            .addRow(Row.Builder().setTitle("브레이크 페달").addText(displayedBrake)
+                .addText(displayedBrakeStatus.replace("\n", " · ")).build())
         .apply {
             if (!hasSpeedPermission()) {
                 addAction(Action.Builder().setTitle("권한 허용")
@@ -130,7 +156,11 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
         try {
             speedReader.close()
         } finally {
-            steeringReader.close()
+            try {
+                steeringReader.close()
+            } finally {
+                brakeReader.close()
+            }
         }
     }
 }
