@@ -29,6 +29,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name="com.example.pleos_driving_coach_poc.shared.MyCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <!-- Other categories: NAVIGATION, CHARGING, IOT, ... -->
+                <category android:name="androidx.car.app.category.POI" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

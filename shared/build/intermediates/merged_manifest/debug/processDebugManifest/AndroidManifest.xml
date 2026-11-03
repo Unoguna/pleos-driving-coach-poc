@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.pleos_driving_coach_poc.shared" >
+
+    <uses-sdk android:minSdkVersion="34" />
+
+    <application>
+
+        <!-- Minimum Car API level -->
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+    </application>
+
+</manifest>

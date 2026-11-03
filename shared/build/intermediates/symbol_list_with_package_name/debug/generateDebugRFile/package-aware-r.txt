@@ -1,0 +1,2 @@
+com.example.pleos_driving_coach_poc.shared
+xml automotive_app_desc

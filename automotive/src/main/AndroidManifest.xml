@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+
     <!-- It indicates that it requires a template host -->
     <uses-feature
         android:name="android.software.car.templates_host"
@@ -38,6 +40,15 @@
                 android:name="distractionOptimized"
                 android:value="true" />
         </activity>
+        <service
+            android:name=".AutomotiveCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <!-- Other categories: NAVIGATION, CHARGING, IOT, ... -->
+                <category android:name="androidx.car.app.category.POI" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

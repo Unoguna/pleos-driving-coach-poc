@@ -3,6 +3,7 @@ plugins {
 }
 
 android {
+    useLibrary("android.car")
     namespace = "com.example.pleos_driving_coach_poc"
     compileSdk {
         version = release(37)
