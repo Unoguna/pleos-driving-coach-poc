@@ -7,6 +7,7 @@ import android.os.Looper
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
@@ -140,6 +141,10 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
             .addRow(Row.Builder().setTitle("브레이크 페달").addText(displayedBrake)
                 .addText(displayedBrakeStatus.replace("\n", " · ")).build())
         .apply {
+            addAction(Action.Builder().setTitle("IMU 확인")
+                .setOnClickListener {
+                    screenManager.push(ImuScreen(carContext))
+                }.build())
             if (!hasSpeedPermission()) {
                 addAction(Action.Builder().setTitle("권한 허용")
                     .setOnClickListener(androidx.car.app.model.ParkedOnlyOnClickListener.create {
@@ -148,7 +153,12 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
             }
         }
         .build()
-        return PaneTemplate.Builder(pane).setHeaderAction(Action.APP_ICON).setTitle("차량 데이터 확인").build()
+        val actions = ActionStrip.Builder()
+            .addAction(Action.Builder().setTitle("차량 상태")
+                .setOnClickListener { screenManager.push(VehicleStateScreen(carContext)) }.build())
+            .build()
+        return PaneTemplate.Builder(pane).setHeaderAction(Action.APP_ICON)
+            .setActionStrip(actions).setTitle("차량 데이터 확인").build()
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
