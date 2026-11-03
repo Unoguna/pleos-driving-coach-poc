@@ -19,6 +19,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://nexus-playground.pleos.ai/repository/maven-releases/")
+            content { includeGroup("ai.pleos.playground") }
+        }
     }
 }
 
@@ -26,4 +30,3 @@ rootProject.name = "pleos-driving-coach-poc"
 include(":mobile")
 include(":automotive")
 include(":shared")
- 

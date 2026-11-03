@@ -31,9 +31,31 @@ internal class SpeedProbeScreen(context: CarContext) : Screen(context),
     private val handler = Handler(Looper.getMainLooper())
     private var latestSpeed = "대기 중"
     private var displayedSpeed = latestSpeed
+    private var latestSteering = "대기 중"
+    private var displayedSteering = latestSteering
+    private var steeringStatus = "연결 대기"
+    private var displayedSteeringStatus = steeringStatus
+    private val steeringReader = SteeringAngleReader(
+        context,
+        onValue = { angle ->
+            latestSteering = if (angle != null && angle.isFinite()) {
+                String.format(Locale.ROOT, "%.1f°", angle)
+            } else {
+                "수신 불가"
+            }
+            scheduleRefresh()
+        },
+        onStatus = { message ->
+            steeringStatus = message
+            scheduleRefresh()
+        }
+    )
     private val refreshSpeed = Runnable {
-        if (latestSpeed != displayedSpeed) {
+        if (latestSpeed != displayedSpeed || latestSteering != displayedSteering ||
+            steeringStatus != displayedSteeringStatus) {
             displayedSpeed = latestSpeed
+            displayedSteering = latestSteering
+            displayedSteeringStatus = steeringStatus
             invalidate()
         }
     }
@@ -43,6 +65,7 @@ internal class SpeedProbeScreen(context: CarContext) : Screen(context),
     }
 
     override fun onResume(owner: LifecycleOwner) {
+        steeringReader.start()
         startIfGranted()
     }
 
@@ -117,7 +140,11 @@ internal class SpeedProbeScreen(context: CarContext) : Screen(context),
 
     private fun queueSpeed(value: String) {
         latestSpeed = value
-        if (latestSpeed != displayedSpeed && !handler.hasCallbacks(refreshSpeed)) {
+        scheduleRefresh()
+    }
+
+    private fun scheduleRefresh() {
+        if (!handler.hasCallbacks(refreshSpeed)) {
             handler.postDelayed(refreshSpeed, 500)
         }
     }
@@ -141,6 +168,8 @@ internal class SpeedProbeScreen(context: CarContext) : Screen(context),
         val pane = Pane.Builder()
             .addRow(Row.Builder().setTitle("현재 속도").addText(displayedSpeed).build())
             .addRow(Row.Builder().setTitle("진단 상태").addText(status).build())
+            .addRow(Row.Builder().setTitle("앞바퀴 조향각 · 좌회전 음수").addText(displayedSteering).build())
+            .addRow(Row.Builder().setTitle("조향각 진단").addText(displayedSteeringStatus).build())
         .apply {
             if (!started) {
                 addAction(Action.Builder().setTitle("권한 허용")
@@ -150,7 +179,7 @@ internal class SpeedProbeScreen(context: CarContext) : Screen(context),
             }
         }
         .build()
-        return PaneTemplate.Builder(pane).setHeaderAction(Action.APP_ICON).setTitle("차량 속도 확인").build()
+        return PaneTemplate.Builder(pane).setHeaderAction(Action.APP_ICON).setTitle("차량 데이터 확인").build()
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
@@ -158,7 +187,11 @@ internal class SpeedProbeScreen(context: CarContext) : Screen(context),
         try {
             if (subscribed) manager?.unregisterCallback(this)
         } finally {
-            car?.disconnect()
+            try {
+                car?.disconnect()
+            } finally {
+                steeringReader.close()
+            }
         }
     }
 }

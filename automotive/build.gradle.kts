@@ -34,6 +34,7 @@ android {
 }
 
 dependencies {
+    implementation("ai.pleos.playground:Vehicle:2.3.2")
     implementation(project(":shared"))
     implementation(libs.androidx.app.automotive)
     implementation(libs.androidx.appcompat)
