@@ -129,8 +129,8 @@ internal class NotificationProbeScreen(context: CarContext) : Screen(context), D
                 }.build())
             .build()
         return ListTemplate.Builder().setSingleList(items).setTitle("알림·플로팅 확인")
-            .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle("음성 확인")
-                .setOnClickListener { screenManager.push(SpeechProbeScreen(carContext)) }.build()).build())
+            .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle("IMU 확인")
+                .setOnClickListener { screenManager.push(ImuScreen(carContext)) }.build()).build())
             .setHeaderAction(Action.BACK).build()
     }
 }

@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
+import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
@@ -52,6 +53,8 @@ internal class SpeechProbeScreen(context: CarContext) : Screen(context), Default
                 }.build())
             .build()
         return ListTemplate.Builder().setTitle("음성 안내 확인").setHeaderAction(Action.BACK)
+            .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle("목소리 비교")
+                .setOnClickListener { screenManager.push(VoiceProbeScreen(carContext)) }.build()).build())
             .setSingleList(items).build()
     }
 }

@@ -35,6 +35,10 @@ internal class SpeechProbeService : Service() {
     private var closed = false
     private var finished = false
     private var attempt = 0
+    private var speakerType: String? = null
+    private var voiceTrial = false
+    private var totalAttempts = 3
+    private val voiceLabel get() = speakerType?.let { "요청 ID=$it" } ?: "목소리 ID 미지정"
     private var startSpeed = "속도 미확인"
     private val audioAttributes = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -52,7 +56,8 @@ internal class SpeechProbeService : Service() {
     private val requestSpeech = Runnable {
         if (!closed) {
             attempt++
-            report("$attempt/3 음성 요청 · ${speedDescription()}")
+            if (voiceTrial) voiceResults[speakerType.orEmpty()] = "음성 요청 중"
+            report("$attempt/$totalAttempts 음성 요청 · $voiceLabel · ${speedDescription()}")
             try {
                 val focus = audioManager.requestAudioFocus(focusRequest)
                 Log.i(TAG, "AUDIO_FOCUS result=$focus")
@@ -60,7 +65,9 @@ internal class SpeechProbeService : Service() {
                     fail("오디오 포커스 요청 거절 · 음성 재생하지 않음")
                     return@Runnable
                 }
-                tts?.speak("음성 안내 시험 ${attempt}회차입니다. 부드럽게 감속해 주세요.")
+                val text = if (voiceTrial) "안녕하세요. 나의 운전 선생님입니다. 부드럽게 출발하고 천천히 감속해 주세요."
+                    else "음성 안내 시험 ${attempt}회차입니다. 부드럽게 감속해 주세요."
+                tts?.speak(text)
             } catch (error: RuntimeException) {
                 fail("음성 요청 실패: ${error.message}")
             }
@@ -71,19 +78,21 @@ internal class SpeechProbeService : Service() {
         override fun onUpdatedRms(rms: Double) = Unit
         override fun onStart() { onMain {
             startSpeed = speedDescription()
-            result = "$attempt/3 재생 시작 · $startSpeed"
+            result = "$attempt/$totalAttempts 재생 시작 · $voiceLabel · $startSpeed"
+            if (voiceTrial) voiceResults[speakerType.orEmpty()] = "재생 시작 · $startSpeed"
             report(result)
         } }
         override fun onDone() { onMain {
             audioManager.abandonAudioFocusRequest(focusRequest)
-            result = "$attempt/3 재생 완료 · 시작 시 $startSpeed"
+            result = "$attempt/$totalAttempts 재생 완료 · $voiceLabel · 시작 시 $startSpeed"
+            if (voiceTrial) voiceResults[speakerType.orEmpty()] = "재생 완료 · 실제 목소리 차이는 청취 확인 필요"
             report(result)
-            if (attempt < 3) {
-                report("다음 안내 10초 후 · ${attempt}/3 완료")
+            if (attempt < totalAttempts) {
+                report("다음 안내 10초 후 · $attempt/$totalAttempts 완료")
                 handler.postDelayed(requestSpeech, 10_000)
             } else {
                 finished = true
-                report("3회 시험 완료 · 실제 소리 청취 여부 확인")
+                report("${totalAttempts}회 시험 완료 · 실제 소리 청취 여부 확인")
                 stopSelf()
             }
         } }
@@ -93,8 +102,12 @@ internal class SpeechProbeService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) { stopSelf(); return START_NOT_STICKY }
-        if (running) { report("이미 시험 실행 중 · $attempt/3"); return START_NOT_STICKY }
+        if (running) { report("이미 시험 실행 중 · $voiceLabel · $attempt/$totalAttempts · 종료 후 다시 선택"); return START_NOT_STICKY }
         running = true
+        voiceTrial = intent.getBooleanExtra(EXTRA_VOICE_TRIAL, false)
+        speakerType = intent.getStringExtra(EXTRA_SPEAKER_TYPE)?.trim()?.takeIf { it.isNotEmpty() }
+        totalAttempts = if (voiceTrial) 1 else 3
+        if (voiceTrial) voiceResults[speakerType.orEmpty()] = "초기화 대기 · 지원 여부 미확인"
         result = "재생 이벤트 대기"
         try {
             val notifications = getSystemService(NotificationManager::class.java)
@@ -103,9 +116,13 @@ internal class SpeechProbeService : Service() {
             val notification = Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("주행 중 음성 안내 시험")
-                .setContentText("3회 안내 후 자동 종료 · 최대 90초")
+                .setContentText("${totalAttempts}회 안내 후 자동 종료 · 최대 90초")
                 .setOngoing(true).build()
             startForeground(203, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
+            if (voiceTrial && speakerType !in KOREAN_SPEAKERS) {
+                fail("한국어 시험에 지원하지 않는 ID: $speakerType")
+                return START_NOT_STICKY
+            }
             handler.postDelayed({ fail("90초 제한으로 시험 종료 · 완료 콜백 확인 필요") }, 90_000)
             if (checkSelfPermission(Car.PERMISSION_SPEED) == PackageManager.PERMISSION_GRANTED) {
                 speedReader = SpeedReader(this, onValue = { value -> onMain {
@@ -126,8 +143,15 @@ internal class SpeechProbeService : Service() {
                         engine.addEventListener(listener)
                         engine.setLocale(Locale.KOREA)
                         engine.setAudioAttributes(audioAttributes)
-                        report("준비 완료 · 10초 후 안내 · 다른 앱/주행 상태로 전환 가능")
-                        handler.postDelayed(requestSpeech, 10_000)
+                        // This setter has no success callback or supported-ID query API.
+                        // Playback completion alone does not prove the engine changed voices.
+                        speakerType?.let {
+                            engine.setSpeakerType(it)
+                            Log.i(TAG, "SET_SPEAKER_TYPE requested=$it locale=ko-KR mode=ON_DEVICE")
+                        }
+                        val delay = if (voiceTrial) 2_000L else 10_000L
+                        report("준비 완료 · ${delay / 1_000}초 후 안내 · $voiceLabel")
+                        handler.postDelayed(requestSpeech, delay)
                     } catch (error: RuntimeException) {
                         fail("TTS 설정 실패: ${error.message}")
                     }
@@ -148,11 +172,12 @@ internal class SpeechProbeService : Service() {
     }
 
     private fun onMain(block: () -> Unit) {
-        handler.post { if (!closed) block() }
+        handler.post { if (!closed && !finished) block() }
     }
 
     private fun fail(message: String) {
         finished = true
+        if (voiceTrial) voiceResults[speakerType.orEmpty()] = message
         result = message
         report(message)
         stopSelf()
@@ -173,7 +198,10 @@ internal class SpeechProbeService : Service() {
                 Log.w(TAG, "TTS cleanup failed", error)
             } finally {
                 audioManager.abandonAudioFocusRequest(focusRequest)
-                if (!finished) report("사용자 또는 시스템에 의해 시험 종료")
+                if (!finished) {
+                    if (voiceTrial) voiceResults[speakerType.orEmpty()] = "시험 중단 · 재생 완료 미확인"
+                    report("사용자 또는 시스템에 의해 시험 종료")
+                }
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 super.onDestroy()
             }
@@ -185,6 +213,12 @@ internal class SpeechProbeService : Service() {
     companion object {
         private const val TAG = "SpeechProbe"
         private const val CHANNEL = "speech_probe_service"
+        const val EXTRA_VOICE_TRIAL = "voice_trial"
+        const val EXTRA_SPEAKER_TYPE = "speaker_type"
+        val KOREAN_SPEAKERS = listOf("seoyoon", "eunwoo", "haeun", "sanghyeok")
+        private val voiceResults = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+        fun voiceResult(speakerType: String) = voiceResults[speakerType] ?: "미실행"
         @Volatile var status = "미실행"
             private set
         @Volatile var result = "재생 기록 없음"

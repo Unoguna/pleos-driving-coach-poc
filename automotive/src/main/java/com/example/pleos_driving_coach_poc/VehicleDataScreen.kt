@@ -229,12 +229,15 @@ internal class VehicleDataScreen(context: CarContext) : Screen(context),
         }
         items.addItem(Row.Builder().setTitle("계기판 경고등 · SDK 코드")
             .addText(displayedSafetyValue).addText(displayedSafetyStatus).build())
-        val actions = ActionStrip.Builder().addAction(Action.Builder().setTitle("IMU 확인")
-            .setOnClickListener { screenManager.push(ImuScreen(carContext)) }.build())
+        val actions = ActionStrip.Builder()
             .addAction(Action.Builder()
                 .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext,
                     android.R.drawable.ic_dialog_info)).build())
                 .setOnClickListener { screenManager.push(NotificationProbeScreen(carContext)) }.build())
+            .addAction(Action.Builder()
+                .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext,
+                    android.R.drawable.ic_lock_silent_mode_off)).build())
+                .setOnClickListener { screenManager.push(SpeechProbeScreen(carContext)) }.build())
             .build()
         return ListTemplate.Builder().setSingleList(items.build())
             .setActionStrip(actions).setHeaderAction(Action.APP_ICON).setTitle("차량 데이터 확인").build()
