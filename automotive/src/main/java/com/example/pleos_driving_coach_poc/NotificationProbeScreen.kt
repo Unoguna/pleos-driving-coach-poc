@@ -12,6 +12,8 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarIcon
+import androidx.core.graphics.drawable.IconCompat
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.ParkedOnlyOnClickListener
@@ -129,8 +131,11 @@ internal class NotificationProbeScreen(context: CarContext) : Screen(context), D
                 }.build())
             .build()
         return ListTemplate.Builder().setSingleList(items).setTitle("알림·플로팅 확인")
-            .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle("IMU 확인")
-                .setOnClickListener { screenManager.push(ImuScreen(carContext)) }.build()).build())
+            .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle("내비 확인")
+                .setOnClickListener { screenManager.push(NavigationProbeScreen(carContext)) }.build())
+                .addAction(Action.Builder().setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext,
+                    android.R.drawable.ic_menu_compass)).build())
+                    .setOnClickListener { screenManager.push(ImuScreen(carContext)) }.build()).build())
             .setHeaderAction(Action.BACK).build()
     }
 }
