@@ -4,6 +4,8 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarIcon
+import androidx.core.graphics.drawable.IconCompat
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.ParkedOnlyOnClickListener
@@ -35,6 +37,10 @@ internal class NavigationProbeScreen(context: CarContext) : Screen(context), Def
         return ListTemplate.Builder().setTitle("내비게이션 연동 확인").setHeaderAction(Action.BACK)
             .setSingleList(items)
             .setActionStrip(ActionStrip.Builder().addAction(Action.Builder().setTitle("내비 화면 열기")
-                .setOnClickListener { reader.showNavigation() }.build()).build()).build()
+                .setOnClickListener { reader.showNavigation() }.build())
+                .addAction(Action.Builder().setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext,
+                    android.R.drawable.ic_menu_sort_by_size)).build())
+                    .setOnClickListener { screenManager.push(TrafficProbeScreen(carContext, reader)) }.build())
+                .build()).build()
     }
 }

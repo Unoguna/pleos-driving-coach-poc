@@ -14,6 +14,7 @@ import ai.pleos.playground.navi.data.RouteInfo
 import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.RouteStateInfo
 import ai.pleos.playground.navi.data.TBTInfo
+import ai.pleos.playground.navi.data.TrafficStatus
 import ai.pleos.playground.navi.data.WaypointInfo
 import ai.pleos.playground.navi.helper.NaviHelper
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
@@ -29,6 +30,14 @@ internal class NavigationReader(private val context: Context, private val onChan
         private set
     var location = "현재 위치 미수신"
         private set
+    var traffic: TrafficStatus? = null
+        private set
+    var trafficStatus = "교통 정보 미수신"
+        private set
+    var trafficReceivedAt = 0L
+        private set
+    var trafficReceiveCount = 0
+        private set
     private val handler = Handler(Looper.getMainLooper())
     private val helper = NaviHelper(context.applicationContext)
     private var started = false
@@ -37,6 +46,7 @@ internal class NavigationReader(private val context: Context, private val onChan
     private var listening = false
     private val pending = mutableSetOf<String>()
     private val queryTimeout = Runnable {
+        if ("ROUTE" in pending) trafficStatus = "10초 동안 새 응답 없음 · 표시값은 마지막 수신값"
         if (pending.isNotEmpty()) report("조회 응답 대기 10초 경과: ${pending.joinToString()} · 내비 실행/안내 상태 확인")
     }
     private val listener = object : NaviHelperEventListener {
@@ -46,6 +56,11 @@ internal class NavigationReader(private val context: Context, private val onChan
         }
         override fun onRouteStateInfo(routeStateInfo: RouteStateInfo) = receive("ROUTE", routeStateInfo) {
             route = "모드=${routeStateInfo.naviMode} · 탐색 중=${routeStateInfo.isRouting}\n옵션=${routeStateInfo.routeOption}"
+            traffic = routeStateInfo.trafficStatus
+            trafficReceivedAt = System.currentTimeMillis()
+            trafficReceiveCount++
+            trafficStatus = "교통 정보 수신 · 구간 ${traffic?.congestionItemList?.size ?: 0}개 · 이벤트 ${traffic?.trafficEventList?.size ?: 0}개"
+            Log.i("TrafficProbe", "RECEIVE count=$trafficReceiveCount receivedAt=$trafficReceivedAt mode=${routeStateInfo.naviMode} $traffic")
         }
         override fun onTBTInfo(tbtInfo: List<TBTInfo>) = receive("TBT", tbtInfo) {
             guidance = if (tbtInfo.isEmpty()) "TBT 0개 수신 · 안내 없음"
@@ -67,6 +82,9 @@ internal class NavigationReader(private val context: Context, private val onChan
             status = "안내 취소 이벤트 수신"
             destination = "안내 취소됨"
             guidance = "안내 취소됨"
+            traffic = null
+            trafficReceivedAt = 0L
+            trafficStatus = "안내 취소됨 · 교통 정보 다시 조회 필요"
         }
         override fun onNavigationStatus(navigationStatus: NavigationStatus) = event("내비 상태 이벤트: $navigationStatus")
         override fun onError(errorCode: NaviErrorCode) = event("내비 오류 이벤트: $errorCode")
@@ -90,9 +108,10 @@ internal class NavigationReader(private val context: Context, private val onChan
     }
 
     fun query() {
-        if (!canCall(READ)) return
+        if (!canCall(READ)) { trafficStatus = status; return }
         handler.removeCallbacks(queryTimeout)
         pending.clear()
+        trafficStatus = "교통 정보 조회 중 · 표시값은 마지막 수신값"
         report("현재 내비 정보 조회 요청 · 콜백 대기")
         listOf<Pair<String, () -> Unit>>(
             "DESTINATION" to { helper.getDestinationInfo() },
@@ -107,10 +126,32 @@ internal class NavigationReader(private val context: Context, private val onChan
                 Log.i(TAG, "REQUEST $key")
             } catch (error: RuntimeException) {
                 pending.remove(key)
+                if (key == "ROUTE") trafficStatus = "교통 정보 조회 실패: ${error.message}"
                 report("$key 조회 실패: ${error.message}")
             }
         }
         handler.postDelayed(queryTimeout, 10_000)
+    }
+
+    fun queryTraffic() {
+        if (!canCall(READ)) {
+            trafficStatus = status
+            onChange()
+            return
+        }
+        handler.removeCallbacks(queryTimeout)
+        trafficStatus = "교통 정보 조회 중 · 표시값은 마지막 수신값"
+        pending.add("ROUTE")
+        try {
+            helper.getRouteStateInfo()
+            Log.i("TrafficProbe", "REQUEST getRouteStateInfo")
+            handler.postDelayed(queryTimeout, 10_000)
+        } catch (error: RuntimeException) {
+            pending.remove("ROUTE")
+            trafficStatus = "교통 정보 조회 실패: ${error.message}"
+            Log.w("TrafficProbe", trafficStatus, error)
+        }
+        onChange()
     }
 
     fun requestTestRoute() {
